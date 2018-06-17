@@ -5,7 +5,7 @@ from scipy.misc import imread as imread
 import skimage.color as skimage
 import matplotlib.pyplot as plt
 import os
-
+import random
 # --------------------------------------------Constants---------------------------------------------
 # ORIGINAL_IMAGE_COEFF = 1
 # # IM_1_EXAMPLE_1 = 'externals/mouth.jpg'
