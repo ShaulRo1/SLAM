@@ -4,6 +4,7 @@ import numpy as np
 import random
 from OpenGL.GL import *
 from OpenGL.GLU import *
+import sol3 as s3
 from skimage import feature
 import matplotlib.pyplot as plt
 display = (400, 300)
@@ -91,13 +92,30 @@ def apply_plane_on_point(point, plane):
     return a * x + b * y + c * z + d
 
 
+def create_depth_image(im_shape, name):
+    row, col = 0, 0
+    new_im = np.zeros(im_shape)
+    while row < im_shape[0]:
+        while col < im_shape[1]:
+            depth = glReadPixels(row, col, 1, 1, GL_DEPTH_COMPONENT, GL_FLOAT)
+            new_im[row, col] = depth
+            col += 1
+        row += 1
+        col = 0
+    plt.imsave(name, new_im)
+    # show_images([new_im.T], 1)
+
+
 def ransac_plane(num_of_iterations):
     best_plane_agreement = 0
     best_plane = (0, 0, 0, 0)
     all_ims = []
     best_im = []
+    should_choose = True
+    threshold = 0.1
     while num_of_iterations > 0:
-        threshold = float(input('choose threshold: '))
+        if should_choose:
+            threshold = float(input('choose threshold: '))
         print('--------------'+str(num_of_iterations))
         cur_agreement = 0
         points = get_n_points_in_world(3)
@@ -116,16 +134,23 @@ def ransac_plane(num_of_iterations):
                 col += 1
             col = 0
             row += 1
-            print(row)
-        show_images([cur_im.T], 1)
-        is_good = input("Is plane good?: ")
-        if is_good == 'y_1':
-            print(plane)
-            return ('1', plane)
-        if is_good == 'y_2':
-            print(plane)
-            return('2', plane)
-        threshold *= 2
+        print('done')
+        if cur_agreement < 100:
+            threshold = threshold * 1.1
+            print(threshold)
+            should_choose = False
+            continue
+        else:
+            show_images([cur_im.T], 1)
+            should_choose = True
+            print(threshold)
+            is_good = input("Is plane good?: ")
+            if is_good == 'y_1':
+                print(plane)
+                return ('1', plane, threshold)
+            if is_good == 'y_2':
+                print(plane)
+                return('2', plane, threshold)
         cur_im = cur_im.T
         all_ims.append(cur_im)
         if cur_agreement > best_plane_agreement:
@@ -273,11 +298,14 @@ def render_cube():
                 elif event.key == pygame.K_UP and rx < 0:
                     rx = 0.0
             elif event.type == pygame.MOUSEBUTTONDOWN:
-                t, plane = ransac_plane(60)
+                t, plane, threshold = ransac_plane(60)
+                name = '/cs/usr/shaul_ro/safe/SLAM/assets/plane_'+str(t)+'_'+str(threshold)+'.png'
                 if t == '1':
                     plane1 = plane
+                    create_depth_image(display, name)
                 if t == '2':
                     plane2 = plane
+                    create_depth_image(display, name)
                 # show_images(all_ims, 2)
 
         glPushMatrix()
@@ -285,7 +313,8 @@ def render_cube():
         glTranslatef(tx, ty, tz)
         glRotatef(ry, 0, 1, 0)
         glRotatef(rx, 1, 0, 0)
-
+        # x, y = pygame.mouse.get_pos()
+        # print(x,y)
         glMultMatrixf(view_mat)
         glGetFloatv(GL_MODELVIEW_MATRIX, view_mat)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
@@ -296,6 +325,75 @@ def render_cube():
         pygame.display.flip()
         pygame.time.wait(10)
 
+
+
+def get_plane_n_d_rep(plane):
+    a, b, c, d = plane
+    norm = math.sqrt(a * a + b * b + c * c)
+    n = np.divide(plane[:3], norm)
+    dist =  -1 * d  / norm
+    return n, dist
+
+
+# def get_plane_in_image(im, plane, thresh):
+#     new_im = np.zeros(im.shape)
+#     h, w = im.shape
+#     r, c = 0, 0
+#     while r < h:
+#         while c < w:
+#             if apply_plane_on_point()
+
 def main():
-    render_cube()
+    im1 = s3.read_image('/cs/+/usr/shaul_ro/SLAM/assets/plane_1_0.2.png', s3.YIQ_REP).T
+    im2 = s3.read_image('/cs/+/usr/shaul_ro/SLAM/assets/plane_2_0.12100000000000002.png',
+                        s3.YIQ_REP).T
+
+    show_images([im1, im2], 1)
+    pixels = get_n_rand_pixels(3)
+    points_1 = []
+    points_2 = []
+    for p in pixels:
+        x, y = p
+        p1 = np.array([y, x, im1[y, x]])
+        p2 = np.array([y, x, im2[y, x]])
+        points_1.append(p1)
+        points_2.append(p2)
+
+    plane1 = get_plane_from_points(points_1)
+    plane2 = get_plane_from_points(points_2)
+
+    thresh_1 = 0.2
+    thresh_2 = 0.121
+
+
+    # render_cube()
+    #
+    # p = (-0.010804695551434103, 2.0726593186071868e-05, -0.016621270618300255, 0.0356358028659609)
+    # print(get_plane_n_d_rep(p))
+
+    # p1 = (-0.0, 0.0, -0.020169288019536727, 0.04638929759697595)
+    # p2 = (-0.012960147339368868, 3.07995631960295e-07, -0.0265530655517785, 0.07148862600900646)
+    # im1  = np.zeros(display)
+    # im2  = np.zeros(display)
+    # row = 0
+    # col = 0
+    # while row < display[0]:
+    #     while col < display[1]:
+    #         point = turn_pixels_to_points([[row, col]])[0][0]
+    #         diff = apply_plane_on_point(point, plane)
+    #         if abs(diff) < threshold:
+    #             cur_agreement += 1
+    #             cur_im[row, col] = 1
+    #         col += 1
+    #     col = 0
+    #     row += 1
+    #     print(row)
+    # show_images([cur_im.T], 1)
+
+
+
+    # x = np.zeros((255, 255))
+    # x = np.zeros((255, 255), dtype=np.uint8)
+    # x[:] = np.arange(255)
+    # plt.imsave('/cs/usr/shaul_ro/safe/SLAM/assets/gradient.png', x)
 main()
